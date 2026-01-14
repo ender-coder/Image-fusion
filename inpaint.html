@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inpainting Pro - 整合版</title>
+    <style>
+        :root { --primary: #00adb5; --ai: #f4d03f; --manual: #3498db; --bg: #121212; --card: #1e1e1e; }
+        
+        body { 
+            background: var(--bg); color: #eee; 
+            font-family: system-ui, -apple-system, sans-serif; 
+            display: flex; flex-direction: column; align-items: center; 
+            padding: 20px; margin: 0; 
+        }
+
+        .container { width: 100%; max-width: 800px; }
+
+        .nav-back { width: 100%; margin-bottom: 15px; text-align: left; }
+        .nav-back a { color: var(--primary); text-decoration: none; font-size: 0.9rem; transition: 0.3s; }
+        .nav-back a:hover { opacity: 0.8; }
+        
+        .tab-group { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab { 
+            padding: 10px 20px; background: #333; border-radius: 8px; 
+            cursor: pointer; border: none; color: white; transition: 0.3s; flex: 1; 
+            font-weight: bold;
+        }
+        .tab.active { background: var(--primary); }
+        .tab.active.ai { background: var(--ai); color: black; }
+        .tab.active.manual { background: var(--manual); }
+
+        .section { 
+            background: var(--card); padding: 25px; border-radius: 12px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid #333; 
+        }
+        
+        h2 { margin-top: 0; font-size: 1.5rem; color: #fff; }
+
+        .main-grid { display: flex; gap: 20px; align-items: stretch; margin-top: 15px; }
+        .left-panel { flex: 1.2; display: flex; flex-direction: column; gap: 15px; }
+        .right-panel { flex: 0.8; display: flex; flex-direction: column; }
+
+        .card-inner { 
+            background: #252525; padding: 18px; border-radius: 8px; 
+            border: 1px solid #333; height: 100%; box-sizing: border-box; 
+            display: flex; flex-direction: column; 
+        }
+
+        #status-bar { 
+            padding: 10px; background: #000; border-radius: 6px; 
+            color: var(--primary); font-size: 0.8rem; font-family: monospace; 
+            text-align: left; border: 1px solid #444; margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .ctrl-item { display: flex; flex-direction: column; gap: 6px; font-size: 0.85rem; margin-bottom: 15px; }
+        input[type="text"], input[type="password"], select, textarea { 
+            background: #111; color: #fff; border: 1px solid #444; 
+            padding: 10px; border-radius: 6px; font-family: monospace; 
+            outline: none; width: 100%; box-sizing: border-box; 
+        }
+        
+        #debug-panel { 
+            background: #000; color: #00ff00; font-family: 'Consolas', monospace; 
+            font-size: 0.8rem; padding: 12px; border-radius: 6px; border: 1px solid #444; 
+            flex-grow: 1; overflow-y: auto; white-space: pre-wrap; line-height: 1.5;
+            min-height: 250px; max-height: 250px;
+            border-top: 1px solid #333; /* 增加頂部分隔線 */
+            margin-top: 5px;
+        }
+
+        .canvas-container { 
+            text-align: center; background: #000; border-radius: 8px; 
+            border: 1px solid #333; margin-top: 20px; overflow: hidden; 
+        }
+        canvas { max-width: 100%; display: block; margin: 0 auto; }
+        
+        .btn-group { display: flex; gap: 10px; margin: 10px 0; }
+        button { padding: 12px 15px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        
+        .btn-main { background: var(--primary); color: white; width: 100%; }
+        .btn-ai { background: var(--ai); color: black; width: 100%; }
+        .btn-manual { background: var(--manual); color: white; flex: 1; }
+        .btn-sub { background: #393e46; color: white; flex: 1; }
+        .btn-download { background: var(--primary); color: white; flex: 1; }
+        
+        .hint-text { font-size: 0.75rem; color: #888; margin-top: 5px; line-height: 1.4; }
+        .hint-text b { color: var(--manual); }
+
+        @media (max-width: 600px) { .main-grid { flex-direction: column; } }
+    </style>
+</head>
+<body>
+
+<div class="nav-back">
+    <a href="index.html">⬅ 返回選單</a>
+</div>
+
+<div class="container">
+    <div class="tab-group">
+        <button id="tab-local" class="tab active" onclick="switchTab('local')">🪄 本地填充</button>
+        <button id="tab-ai" class="tab ai" onclick="switchTab('ai')">🍌 Nano Banana AI</button>
+        <button id="tab-manual" class="tab manual" onclick="switchTab('manual')">🛠️ 手動模式</button>
+    </div>
+
+    <div class="section">
+        <h2>影像修補與填充</h2>
+        
+        <input type="file" id="fileIn" accept="image/png" hidden onchange="handleFile(this)">
+        <button onclick="document.getElementById('fileIn').click()" style="background:#252525; color:#aaa; width:100%; border:2px dashed #444; padding: 20px; border-radius: 10px; cursor: pointer; margin-bottom: 15px;">🖼️ 點擊上傳透明 PNG 圖片</button>
+
+        <div id="workArea" style="display:none;">
+            <div class="main-grid">
+                <div class="left-panel">
+                    <div id="status-bar">STATUS: READY</div>
+                    <div class="card-inner">
+                        <div id="panel-local">
+                            <div class="ctrl-item">
+                                <label>柔化半徑 (Edge Soften):</label>
+                                <input type="range" id="blurStrength" min="0" max="10" value="3">
+                            </div>
+                            <div class="ctrl-item">
+                                <label>質感雜訊 (Texture Noise):</label>
+                                <input type="range" id="noiseLevel" min="0" max="20" value="5">
+                            </div>
+                            <button class="btn-main" onclick="startLocalInpaint()">🪄 執行本地填充</button>
+                        </div>
+
+                        <div id="panel-ai" style="display:none;">
+                            <div class="ctrl-item">
+                                <label>🔑 API Key:</label>
+                                <input type="password" id="userApiKey" placeholder="在此貼上 API Key" onchange="localStorage.setItem('nb_key', this.value)">
+                            </div>
+                            <div class="btn-group">
+                                <button class="btn-manual" style="background:#444; flex:1;" onclick="scanModels()">🔍 偵測模型</button>
+                                <select id="modelSelect" style="flex:2;"><option value="">請先掃描...</option></select>
+                            </div>
+                            <textarea id="aiPrompt" rows="2" placeholder="修補內容描述 (例如：填入森林背景)..."></textarea>
+                            <button class="btn-ai" id="aiRunBtn" style="margin-top:10px;" onclick="startAIInpaint()">🚀 啟動 AI 運算</button>
+                        </div>
+
+                        <div id="panel-manual" style="display:none;">
+                            <div class="ctrl-item">
+                                <label>📝 設定修補目標:</label>
+                                <textarea id="manualGoal" rows="2" placeholder="例如：寫實的沙灘、科技感背景..."></textarea>
+                            </div>
+                            <button class="btn-manual" style="width:100%;" onclick="copyManualPrompt()">📋 複製 AI 提示指令</button>
+                            <div class="hint-text">
+                                點擊上方按鈕後，請至 ChatGPT/Gemini <b>直接貼上指令並上傳您的原圖</b>。AI 生成後下載圖片並從下方貼回。
+                            </div>
+                            <hr style="border:0; border-top:1px solid #444; margin:15px 0;">
+                            <div class="ctrl-item">
+                                <label>📥 貼回處理後的圖檔：</label>
+                                <input type="file" accept="image/*" onchange="handleManualMerge(this)">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="right-panel">
+                    <div class="card-inner" style="position: relative;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                            <span style="font-size: 0.8rem; color: #888;">CONSOLE WINDOWS</span>
+                            <button onclick="clearConsole()" style="padding: 2px 8px; font-size: 0.7rem; background: #444; color: #ccc; border-radius: 4px;">CLEAR</button>
+                        </div>
+                        <div id="debug-panel">> 系統控制台就緒</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="btn-group" style="margin-top: 15px;">
+                <button onclick="resetCanvas()" class="btn-sub">🔄 重置畫布</button>
+                <button onclick="downloadResult()" class="btn-download">💾 下載最終成品</button>
+            </div>
+
+            <div class="canvas-container">
+                <canvas id="mainCvs"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const cvs = document.getElementById('mainCvs');
+    const ctx = cvs.getContext('2d', { willReadFrequently: true });
+    let originalImgData = null, maskMap = null, currentMode = 'local', currentFileName = "image.png";
+
+    window.onload = () => {
+        const savedKey = localStorage.getItem('nb_key');
+        if (savedKey) document.getElementById('userApiKey').value = savedKey;
+    };
+
+    function log(msg, type = "INFO") {
+        const p = document.getElementById('debug-panel');
+        const statusBox = document.getElementById('status-bar');
+        const prefix = type === "ERROR" ? "❌" : (type === "SUCCESS" ? "✅" : ">");
+        
+        // 1. 詳細內容寫入 Console (包含時間戳記)
+        const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        p.innerText += `\n[${time}] ${prefix} ${msg}`;
+        p.scrollTop = p.scrollHeight;
+    
+        // 2. 簡易狀態寫入 STATUS 欄 (只取前 15 個字或簡短說明)
+        let briefMsg = msg;
+        if (type === "ERROR") briefMsg = "ERROR OCCURRED";
+        if (type === "SUCCESS") briefMsg = "COMPLETED";
+        // 如果訊息太長，截斷它
+        if (briefMsg.length > 20) briefMsg = briefMsg.substring(0, 17) + "...";
+        
+        statusBox.innerText = `STATUS: ${briefMsg.toUpperCase()}`;
+        
+        // 根據類型改變狀態欄顏色 (選配)
+        statusBox.style.color = type === "ERROR" ? "#ff5555" : (type === "SUCCESS" ? "#00ff00" : "var(--primary)");
+    }
+    
+    // 3. 新增清除功能函數
+    function clearConsole() {
+        document.getElementById('debug-panel').innerText = "> Console cleared.";
+        log("Console reset", "INFO");
+    }
+
+    function switchTab(mode) {
+        if (currentMode === mode) return;
+        currentMode = mode;
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.getElementById('tab-' + mode).classList.add('active');
+        document.getElementById('panel-local').style.display = (mode === 'local' ? 'block' : 'none');
+        document.getElementById('panel-ai').style.display = (mode === 'ai' ? 'block' : 'none');
+        document.getElementById('panel-manual').style.display = (mode === 'manual' ? 'block' : 'none');
+        log(`切換至 ${mode} 模式`);
+    }
+
+    async function handleFile(input) {
+        const file = input.files[0];
+        if (!file) return;
+        currentFileName = file.name;
+        const img = await new Promise(res => {
+            const i = new Image();
+            i.onload = () => res(i);
+            i.src = URL.createObjectURL(file);
+        });
+        cvs.width = img.width; cvs.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        originalImgData = ctx.getImageData(0, 0, cvs.width, cvs.height);
+        
+        maskMap = new Uint8Array(cvs.width * cvs.height);
+        let transparentCount = 0;
+        for (let i = 0; i < originalImgData.data.length; i += 4) {
+            if (originalImgData.data[i + 3] < 255) {
+                maskMap[i / 4] = 1;
+                transparentCount++;
+            }
+        }
+        document.getElementById('workArea').style.display = 'block';
+        if (transparentCount === 0) {
+            log("警告：此圖片未偵測到任何透明區域，填充功能將無效。", "ERROR");
+        } else {
+            log(`載入影像: ${currentFileName}`, "SUCCESS");
+        }
+    }
+
+    async function startAIInpaint() {
+        const key = document.getElementById('userApiKey').value;
+        const model = document.getElementById('modelSelect').value;
+        if(!model) return log("請先選取模型", "ERROR");
+        
+        log("AI 處理中...");
+        try {
+            const base64 = cvs.toDataURL('image/png').split(',')[1];
+            const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [
+                        { text: document.getElementById('aiPrompt').value || "Inpaint the transparent parts." },
+                        { inline_data: { mime_type: "image/png", data: base64 } }
+                    ]}],
+                    generationConfig: { response_modalities: ["IMAGE"] }
+                })
+            });
+
+            const result = await resp.json();
+            if (!resp.ok) {
+                if (resp.status === 429) {
+                    throw new Error("API 使用額度已達上限，請更換 Key 或等待冷卻或改用右上角手動模式");
+                }
+                throw new Error(result.error?.message || "請求失敗");
+            }
+
+            const imgPart = result.candidates?.[0]?.content?.parts?.find(p => p.inline_data);
+            if (imgPart) {
+                const i = new Image();
+                i.onload = () => { ctx.drawImage(i, 0, 0); log("修補完成", "SUCCESS"); };
+                i.src = `data:image/png;base64,${imgPart.inline_data.data}`;
+            }
+        } catch (e) { log(e.message, "ERROR"); }
+    }
+
+    function copyManualPrompt() {
+        const userGoal = document.getElementById('manualGoal').value || "與原圖風格一致的自然內容";
+        const template = `我有一張名為「${currentFileName}」的圖片，圖片中帶有透明的區域（Alpha Channel）。
+請參考這張圖片的視覺風格，並在透明區域填入以下內容：
+---
+修補目標：${userGoal}
+---
+要求：請直接生成並回傳完整修補後的圖片，確保銜接處無縫且自然。`;
+        
+        navigator.clipboard.writeText(template).then(() => {
+            log("指令已複製！請搭配圖片貼給 AI。", "SUCCESS");
+            alert("指令模板已複製到剪貼簿！\n請現在到 ChatGPT/Gemini 貼上指令並『上傳您的原圖』。");
+        });
+    }
+
+    async function scanModels() {
+        const key = document.getElementById('userApiKey').value;
+        if(!key) return log("需 API Key", "ERROR");
+        try {
+            const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+            const data = await resp.json();
+            const imageModels = data.models.filter(m => m.supportedGenerationMethods.includes("generateContent") && (m.name.includes("image") || m.name.includes("banana")));
+            const select = document.getElementById('modelSelect');
+            select.innerHTML = '';
+            imageModels.forEach(m => select.add(new Option(m.displayName || m.name, m.name.replace('models/', ''))));
+            log("模型掃描完畢", "SUCCESS");
+        } catch (e) { log("掃描失敗", "ERROR"); }
+    }
+    
+    async function startLocalInpaint() {
+        log("啟動無痕自動填補...");
+    
+        const blurVal = document.getElementById('blurStrength') ? parseInt(document.getElementById('blurStrength').value) : 3;
+        const noiseVal = document.getElementById('noiseLevel') ? parseInt(document.getElementById('noiseLevel').value) : 5;
+    
+        let imgData = ctx.getImageData(0, 0, cvs.width, cvs.height);
+        let data = imgData.data;
+        const width = cvs.width;
+        const height = cvs.height;
+    
+        // 建立工作副本 (純色填充用，不含雜訊)
+        let workingData = new Uint8ClampedArray(data);
+        let isFilled = new Uint8Array(width * height);
+        let edgeQueue = [];
+    
+        // 1. 初始化邊緣：只找透明與不透明的交界
+        for (let i = 0; i < maskMap.length; i++) {
+            if (maskMap[i] === 1) {
+                const x = i % width, y = Math.floor(i / width);
+                let neighbors = [[0,1],[0,-1],[1,0],[-1,0]];
+                for(let [dx, dy] of neighbors) {
+                    const nx = x+dx, ny = y+dy;
+                    if(nx>=0 && nx<width && ny>=0 && ny<height && maskMap[ny*width+nx] === 0) {
+                        edgeQueue.push(i);
+                        break;
+                    }
+                }
+            } else {
+                isFilled[i] = 1;
+            }
+        }
+    
+        // 2. 向心迭代擴散 (純顏色採樣，不在此處加雜訊)
+        let inQueue = new Uint8Array(width * height); // 紀錄是否已在隊列中
+
+        // 初始化：將首批邊緣標記為已在隊列
+        for(let idx of edgeQueue) inQueue[idx] = 1;
+        
+        let iteration = 0;
+        while (edgeQueue.length > 0 && iteration < 1500) {
+            let nextEdgeQueue = [];
+            for (let i of edgeQueue) {
+                if (isFilled[i] && workingData[i*4+3] === 255 && iteration > 0) continue;
+    
+                const x = i % width, y = Math.floor(i / width);
+                let r=0, g=0, b=0, totalWeight=0;
+    
+                // 採用 5x5 區域採樣以獲得更平滑的過渡
+                for (let dy = -2; dy <= 2; dy++) {
+                    for (let dx = -2; dx <= 2; dx++) {
+                        const nx = x+dx, ny = y+dy;
+                        if(nx>=0 && nx<width && ny>=0 && ny<height) {
+                            const ni = ny*width+nx;
+                            if(isFilled[ni]) {
+                                const weight = 1.0 / (Math.sqrt(dx*dx + dy*dy) || 1);
+                                r += workingData[ni*4] * weight;
+                                g += workingData[ni*4+1] * weight;
+                                b += workingData[ni*4+2] * weight;
+                                totalWeight += weight;
+                            }
+                        }
+                    }
+                }
+    
+                if (totalWeight > 0) {
+                    workingData[i*4]   = r / totalWeight;
+                    workingData[i*4+1] = g / totalWeight;
+                    workingData[i*4+2] = b / totalWeight;
+                    workingData[i*4+3] = 255;
+                    isFilled[i] = 1;
+                    inQueue[i] = 0; // 處理完了，從隊列狀態移除
+    
+                    let neighbors = [[0,1],[0,-1],[1,0],[-1,0]];
+                    for(let [dx, dy] of neighbors) {
+                        const nx = x+dx, ny = y+dy;
+                        if(nx>=0 && nx<width && ny>=0 && ny<height) {
+                            const ni = ny*width+nx;
+                            if(maskMap[ni] === 1 && !isFilled[ni] && !inQueue[ni]) {
+                                nextEdgeQueue.push(ni);
+                                inQueue[ni] = 1; // 立即標記，防止本輪其他像素重複加入它
+                            }
+                        }
+                    }
+                }
+            }
+            edgeQueue = nextEdgeQueue;
+            iteration++;
+            if (iteration % 15 === 0) {
+                imgData.data.set(workingData);
+                ctx.putImageData(imgData, 0, 0);
+                await new Promise(r => requestAnimationFrame(r));
+            }
+        }
+    
+        // 3. 填補完成後，統一灑上質感雜訊 (只針對原本透明的區域)
+        if (noiseVal > 0) {
+            for (let i = 0; i < maskMap.length; i++) {
+                if (maskMap[i] === 1) {
+                    const noise = (Math.random() - 0.5) * noiseVal * 2;
+                    workingData[i*4]   = Math.min(255, Math.max(0, workingData[i*4] + noise));
+                    workingData[i*4+1] = Math.min(255, Math.max(0, workingData[i*4+1] + noise));
+                    workingData[i*4+2] = Math.min(255, Math.max(0, workingData[i*4+2] + noise));
+                }
+            }
+        }
+    
+        // 4. 影像模糊處理與最終合成
+        imgData.data.set(workingData);
+        const resultBmp = await createImageBitmap(imgData);
+        
+        ctx.clearRect(0, 0, width, height);
+        if (blurVal > 0) {
+            ctx.filter = `blur(${blurVal}px)`;
+            ctx.drawImage(resultBmp, 0, 0);
+            ctx.filter = "none";
+        } else {
+            ctx.drawImage(resultBmp, 0, 0);
+        }
+        
+        // 5. 將原圖蓋上去，確保原始非透明像素 100% 保持原樣
+        const tempCvs = document.createElement('canvas');
+        tempCvs.width = width; tempCvs.height = height;
+        tempCvs.getContext('2d').putImageData(originalImgData, 0, 0);
+        ctx.drawImage(tempCvs, 0, 0);
+    
+        log(`自動填補完成，共歷經 ${iteration} 次掃描`, "SUCCESS");
+    }
+    
+    async function handleManualMerge(input) {
+        const file = input.files[0];
+        if(!file) return;
+        log("合併手動修補圖層...");
+        const aiImg = await new Promise(res => {
+            const i = new Image(); i.onload = () => res(i); i.src = URL.createObjectURL(file);
+        });
+        const tCvs = document.createElement('canvas');
+        tCvs.width = cvs.width; tCvs.height = cvs.height;
+        const tCtx = tCvs.getContext('2d');
+        tCtx.drawImage(aiImg, 0, 0, cvs.width, cvs.height);
+        const aiData = tCtx.getImageData(0, 0, cvs.width, cvs.height);
+        const finalData = ctx.getImageData(0, 0, cvs.width, cvs.height);
+        for(let i=0; i<maskMap.length; i++) {
+            if(maskMap[i] === 1) {
+                const idx = i * 4;
+                finalData.data[idx] = aiData.data[idx];
+                finalData.data[idx+1] = aiData.data[idx+1];
+                finalData.data[idx+2] = aiData.data[idx+2];
+                finalData.data[idx+3] = 255;
+            }
+        }
+        ctx.putImageData(finalData, 0, 0);
+        log("合併成功", "SUCCESS");
+    }
+
+    function resetCanvas() { if(originalImgData) ctx.putImageData(originalImgData, 0, 0); log("已重置"); }
+    function downloadResult() { const a = document.createElement('a'); a.href = cvs.toDataURL(); a.download = `Final_${currentFileName}`; a.click(); }
+</script>
+</body>
+</html>

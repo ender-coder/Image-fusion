@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>影像處理工作站 - 導覽首頁</title>
+    <style>
+        :root { 
+            --primary: #00adb5; 
+            --bg: #0f0f0f; 
+            --card: #1e1e1e; 
+            --accent-xor: #00adb5;
+            --accent-mask: #f0ad4e;
+            --accent-inpaint: #a646cf; 
+            --text-main: #eeeeee;
+            --text-dim: #888888;
+        }
+
+        body { 
+            background: var(--bg); color: var(--text-main); 
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; 
+            display: flex; justify-content: center; align-items: center; 
+            min-height: 100vh; margin: 0; overflow: hidden;
+        }
+
+        .menu-container { text-align: center; width: 100%; max-width: 600px; padding: 20px; }
+        header { margin-bottom: 40px; }
+        h1 { 
+            font-size: 2.2rem; margin-bottom: 10px;
+            background: linear-gradient(to right, #fff, var(--primary));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .subtitle { color: var(--text-dim); font-size: 0.9rem; }
+
+        .menu-list { display: grid; grid-template-columns: 1fr; gap: 15px; }
+        .menu-item {
+            background: var(--card); padding: 20px; border-radius: 16px;
+            text-decoration: none; color: white; display: flex; align-items: center;
+            gap: 15px; transition: 0.3s; border: 1px solid #333; text-align: left;
+            position: relative; overflow: hidden;
+        }
+        .menu-item:hover:not(.coming-soon) {
+            transform: translateY(-3px); border-color: var(--primary);
+            background: #252525; box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+        }
+
+        .icon-box {
+            width: 45px; height: 45px; border-radius: 10px;
+            display: flex; justify-content: center; align-items: center; font-size: 1.4rem;
+        }
+        .info { flex-grow: 1; }
+        .title { display: block; font-size: 1.1rem; font-weight: bold; margin-bottom: 2px; }
+        .description { display: block; font-size: 0.8rem; color: var(--text-dim); }
+
+        .mode-xor .icon-box { background: rgba(0, 173, 181, 0.1); color: var(--accent-xor); }
+        .mode-mask .icon-box { background: rgba(240, 173, 78, 0.1); color: var(--accent-mask); }
+        .mode-inpaint .icon-box { background: rgba(166, 70, 207, 0.1); color: var(--accent-inpaint); }
+
+        /* 酷炫漸層虛線邊框設計 */
+        .coming-soon {
+            opacity: 0.8;
+            cursor: default;
+            border: 1px dashed transparent;
+            background: linear-gradient(var(--card), var(--card)) padding-box,
+                        linear-gradient(45deg, #333, var(--primary), #333, var(--accent-inpaint)) border-box;
+            background-size: 200% 200%;
+            animation: gradientMove 4s linear infinite;
+            border-style: dashed;
+            border-width: 2px;
+        }
+
+        @keyframes gradientMove {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .coming-soon .icon-box {
+            background: rgba(255, 255, 255, 0.05);
+            color: #555;
+        }
+
+        .coming-soon .title { color: #888; }
+    </style>
+</head>
+<body>
+
+<div class="menu-container">
+    <header>
+        <h1>影像處理工作站</h1>
+        <p class="subtitle">Secure Pixel Processing Studio</p>
+    </header>
+
+    <div class="menu-list">
+        <a href="xor.html" class="menu-item mode-xor">
+            <div class="icon-box">♾️</div>
+            <div class="info">
+                <span class="title">影像 XOR 拆分</span>
+                <span class="description">全圖隨機雜訊加密，100% 像素還原。</span>
+            </div>
+        </a>
+
+        <a href="mask.html" class="menu-item mode-mask">
+            <div class="icon-box">🎭</div>
+            <div class="info">
+                <span class="title">影像遮罩拆分</span>
+                <span class="description">局部塗鴉拆分檔案，隱藏敏感資訊。</span>
+            </div>
+        </a>
+
+        <a href="inpaint.html" class="menu-item mode-inpaint">
+            <div class="icon-box">🪄</div>
+            <div class="info">
+                <span class="title">影像填空修補</span>
+                <span class="description">智慧修補透明圖層，包含分層AI修補模式。</span>
+            </div>
+        </a>
+
+        <div class="menu-item coming-soon">
+            <div class="icon-box">⏳</div>
+            <div class="info">
+                <span class="title">敬請期待新功能...</span>
+                <span class="description">更多影像處理工具開發中</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

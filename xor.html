@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>影像拆合工作站 - XOR Split & Merge</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root { --primary: #00adb5; --bg: #121212; --card: #1e1e1e; }
+        body { background: var(--bg); color: #eee; font-family: system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; align-items: center; padding: 20px; margin: 0; }
+        .container { width: 100%; max-width: 800px; }
+        .tab-group { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab { padding: 10px 20px; background: #333; border-radius: 8px; cursor: pointer; border: none; color: white; transition: 0.3s; flex: 1; }
+        .tab.active { background: var(--primary); }
+        .section { background: var(--card); padding: 25px; border-radius: 12px; display: none; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .section.active { display: block; }
+        .nav-back { width: 100%; margin-bottom: 15px; }
+        .nav-back a { color: var(--primary); text-decoration: none; font-size: 0.9rem; }
+        input[type="text"], input[type="file"] { width: 100%; padding: 12px; margin: 10px 0; border-radius: 6px; border: 1px solid #333; background: #252525; color: white; box-sizing: border-box; }
+        .btn-group { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+        button { padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .btn-main { background: var(--primary); color: white; flex: 2; min-width: 120px; }
+        .btn-sub { background: #393e46; color: white; flex: 1; min-width: 100px; }
+        .btn-download { background: #f0ad4e; color: #fff; flex: 1; min-width: 100px; display: none; } /* 初始隱藏 */
+        .mode-toggle { display: flex; gap: 10px; margin-bottom: 5px; font-size: 0.85rem; }
+        .mode-label { cursor: pointer; opacity: 0.6; }
+        .mode-label.active { opacity: 1; color: var(--primary); font-weight: bold; }
+        canvas { max-width: 100%; margin-top: 20px; border-radius: 8px; display: none; background-color: #000; box-shadow: 0 0 20px rgba(0,0,0,0.8); cursor: pointer; }
+        #status-split, #status-merge { margin-top: 15px; color: var(--primary); text-align: center; font-weight: bold; }
+        
+        /* 純圖模式樣式 */
+        body.pure-view { padding: 0; background: #000; justify-content: center; height: 100vh; overflow: hidden; }
+        body.pure-view canvas { display: block; margin: 0; max-width: 100vw; max-height: 100vh; object-fit: contain; border-radius: 0; box-shadow: none; }
+        body.pure-view .nav-back, body.pure-view .container { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="nav-back">
+    <a href="index.html">⬅ 返回選單</a>
+</div>
+
+<div class="container" id="main-ui">
+    <div class="tab-group">
+        <button class="tab active" id="tab-merge" onclick="switchTab('merge')">合成解碼 (Merge)</button>
+        <button class="tab" id="tab-split" onclick="switchTab('split')">批次拆分 (Split)</button>
+    </div>
+
+    <div id="section-merge" class="section active">
+        <h2>影像解碼還原</h2>
+        <div class="mode-toggle">
+            <span id="merge-mode-url" class="mode-label active" onclick="setMergeMode('url')">🔗 網址合成</span>
+            <span style="color:#555">|</span>
+            <span id="merge-mode-file" class="mode-label" onclick="setMergeMode('file')">📁 檔案合成</span>
+        </div>
+
+        <div id="merge-input-url">
+            <label>圖片 A 網址 (Share 1)</label>
+            <input type="text" id="img1Input" placeholder="輸入或貼上 Share 1 的 WebP/PNG 網址">
+            <label>圖片 B 網址 (Share 2)</label>
+            <input type="text" id="img2Input" placeholder="輸入或貼上 Share 2 的 WebP/PNG 網址">
+        </div>
+
+        <div id="merge-input-file" style="display: none;">
+            <label>選取 Share 1</label>
+            <input type="file" id="fileMerge1" accept="image/*">
+            <label>選取 Share 2</label>
+            <input type="file" id="fileMerge2" accept="image/*">
+        </div>
+        
+        <div class="btn-group">
+            <button class="btn-main" onclick="handleMerge()">立即還原預覽</button>
+            <button id="btn-copy-link" class="btn-sub" onclick="copyShareLink()">複製分享連結</button>
+            <button id="btn-download-img" class="btn-download" onclick="downloadResult()">💾 下載圖片</button>
+        </div>
+        <div id="status-merge"></div>
+    </div>
+
+    <div id="section-split" class="section">
+        <h2>批次拆分加密 (WebP 無損)</h2>
+        <div class="mode-toggle">
+            <span id="split-mode-file" class="mode-label active" onclick="setSplitMode('file')">📁 上傳檔案</span>
+            <span style="color:#555">|</span>
+            <span id="split-mode-url" class="mode-label" onclick="setSplitMode('url')">🔗 貼上網址</span>
+        </div>
+
+        <div id="split-input-file">
+            <input type="file" id="fileSplit" multiple accept="image/*">
+        </div>
+        <div id="split-input-url" style="display: none;">
+            <input type="text" id="urlSplit" placeholder="貼上圖片網址 (多個網址請用逗號隔開)">
+        </div>
+
+        <button class="btn-main" style="width:100%" onclick="handleBatchSplit()">開始加密並下載 ZIP</button>
+        <div id="status-split"></div>
+    </div>
+</div>
+
+<canvas id="canvas-merge" onclick="downloadResult()" title="點擊下載圖片"></canvas>
+
+<script>
+    let splitMode = 'file';
+    let mergeMode = 'url';
+
+    function switchTab(tab) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.getElementById(`tab-${tab}`).classList.add('active');
+        document.getElementById(`section-${tab}`).classList.add('active');
+    }
+
+    function setSplitMode(mode) {
+        splitMode = mode;
+        document.getElementById('split-mode-file').classList.toggle('active', mode === 'file');
+        document.getElementById('split-mode-url').classList.toggle('active', mode === 'url');
+        document.getElementById('split-input-file').style.display = (mode === 'file') ? 'block' : 'none';
+        document.getElementById('split-input-url').style.display = (mode === 'url') ? 'block' : 'none';
+    }
+
+    function setMergeMode(mode) {
+        mergeMode = mode;
+        document.getElementById('merge-mode-url').classList.toggle('active', mode === 'url');
+        document.getElementById('merge-mode-file').classList.toggle('active', mode === 'file');
+        document.getElementById('merge-input-url').style.display = (mode === 'url') ? 'block' : 'none';
+        document.getElementById('merge-input-file').style.display = (mode === 'file') ? 'block' : 'none';
+        document.getElementById('btn-copy-link').style.display = (mode === 'url') ? 'block' : 'none';
+    }
+
+    function downloadResult() {
+        const cvs = document.getElementById('canvas-merge');
+        if (cvs.style.display === 'none') return;
+        
+        const link = document.createElement('a');
+        link.download = `XOR_Recovered_${Date.now()}.png`;
+        link.href = cvs.toDataURL('image/png');
+        link.click();
+    }
+
+    function copyShareLink() {
+        const i1 = document.getElementById('img1Input').value.trim();
+        const i2 = document.getElementById('img2Input').value.trim();
+        if (!i1 || !i2) return alert("請先輸入兩張圖片網址");
+
+        const url = new URL(window.location.href.split('?')[0]);
+        url.searchParams.set('img1', i1);
+        url.searchParams.set('img2', i2);
+        url.searchParams.set('view', 'pure');
+
+        navigator.clipboard.writeText(url.toString()).then(() => {
+            alert("✅ 已複製純圖模式連結！");
+        });
+    }
+
+    function performXOR(d1, d2) {
+        const res = new Uint8ClampedArray(d1.length);
+        for (let i = 0; i < d1.length; i += 4) {
+            res[i] = d1[i] ^ d2[i];
+            res[i+1] = d1[i+1] ^ d2[i+1];
+            res[i+2] = d1[i+2] ^ d2[i+2];
+            res[i+3] = 255;
+        }
+        return res;
+    }
+
+    async function handleBatchSplit() {
+        let sources = [];
+        const status = document.getElementById('status-split');
+        
+        if (splitMode === 'file') {
+            const files = document.getElementById('fileSplit').files;
+            if (!files.length) return alert("請選取檔案");
+            for (let f of files) sources.push({ data: URL.createObjectURL(f), name: f.name.split('.')[0] });
+        } else {
+            const urls = document.getElementById('urlSplit').value.split(',').map(u => u.trim()).filter(u => u);
+            if (!urls.length) return alert("請輸入網址");
+            urls.forEach((u, i) => sources.push({ data: u, name: `Remote_${i+1}` }));
+        }
+
+        const zip = new JSZip();
+        for (let i = 0; i < sources.length; i++) {
+            const src = sources[i];
+            status.innerText = `⏳ 處理中 (${i+1}/${sources.length}): ${src.name}`;
+            try {
+                const img = await loadImage(src.data);
+                const cvs = document.createElement('canvas');
+                const ctx = cvs.getContext('2d');
+                cvs.width = img.width; cvs.height = img.height;
+                ctx.drawImage(img, 0, 0);
+                const oData = ctx.getImageData(0, 0, cvs.width, cvs.height);
+                const s1D = ctx.createImageData(cvs.width, cvs.height);
+                const s2D = ctx.createImageData(cvs.width, cvs.height);
+                const rnd = new Uint8Array(oData.data.length);
+                const step = 65536;
+                for (let j = 0; j < rnd.length; j += step) {
+                    const cur = Math.min(step, rnd.length - j);
+                    crypto.getRandomValues(rnd.subarray(j, j + cur));
+                }
+                for (let j = 0; j < oData.data.length; j += 4) {
+                    for (let k = 0; k < 3; k++) {
+                        const r = rnd[j+k];
+                        s1D.data[j+k] = r;
+                        s2D.data[j+k] = oData.data[j+k] ^ r;
+                    }
+                    s1D.data[j+3] = 255; s2D.data[j+3] = 255;
+                }
+                ctx.putImageData(s1D, 0, 0);
+                zip.file(`${src.name}_S1.webp`, await new Promise(r => cvs.toBlob(r, 'image/webp', 1)));
+                ctx.putImageData(s2D, 0, 0);
+                zip.file(`${src.name}_S2.webp`, await new Promise(r => cvs.toBlob(r, 'image/webp', 1)));
+                if (splitMode === 'file') URL.revokeObjectURL(src.data);
+            } catch (e) { alert(`處理 ${src.name} 失敗，檢查 CORS。`); }
+        }
+        status.innerText = "📦 打包中...";
+        const blob = await zip.generateAsync({type:"blob", compression:"STORE"});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `XOR_Shares_${Date.now()}.zip`;
+        a.click();
+        status.innerText = "✅ 下載完成";
+    }
+
+    async function handleMerge() {
+        const st = document.getElementById('status-merge');
+        const cvs = document.getElementById('canvas-merge');
+        const dlBtn = document.getElementById('btn-download-img');
+        let src1, src2;
+
+        if (mergeMode === 'url') {
+            src1 = document.getElementById('img1Input').value;
+            src2 = document.getElementById('img2Input').value;
+        } else {
+            const f1 = document.getElementById('fileMerge1').files[0];
+            const f2 = document.getElementById('fileMerge2').files[0];
+            if (!f1 || !f2) return alert("請選取兩個檔案");
+            src1 = URL.createObjectURL(f1);
+            src2 = URL.createObjectURL(f2);
+        }
+
+        try {
+            st.innerText = "⏳ 還原中...";
+            dlBtn.style.display = "none"; // 重置下載鈕
+            const [i1, i2] = await Promise.all([loadImage(src1), loadImage(src2)]);
+            const ctx = cvs.getContext('2d');
+            cvs.width = Math.min(i1.width, i2.width);
+            cvs.height = Math.min(i1.height, i2.height);
+            ctx.drawImage(i1, 0, 0);
+            const d1 = ctx.getImageData(0, 0, cvs.width, cvs.height);
+            ctx.drawImage(i2, 0, 0);
+            const d2 = ctx.getImageData(0, 0, cvs.width, cvs.height);
+            const res = ctx.createImageData(cvs.width, cvs.height);
+            res.data.set(performXOR(d1.data, d2.data));
+            ctx.putImageData(res, 0, 0);
+            cvs.style.display = "block";
+            dlBtn.style.display = "block"; // 顯示下載鈕
+            st.innerText = "✨ 已還原";
+            if (mergeMode === 'file') { URL.revokeObjectURL(src1); URL.revokeObjectURL(src2); }
+        } catch (e) { st.innerText = "❌ 失敗，檢查格式或跨域權限"; }
+    }
+
+    function loadImage(url) {
+        return new Promise((res, rej) => {
+            const i = new Image();
+            i.crossOrigin = "Anonymous";
+            i.onload = () => res(i);
+            i.onerror = rej;
+            i.src = url;
+        });
+    }
+
+    window.onload = () => {
+        const p = new URLSearchParams(window.location.search);
+        if (p.get('img1') && p.get('img2')) {
+            document.getElementById('img1Input').value = p.get('img1');
+            document.getElementById('img2Input').value = p.get('img2');
+            setMergeMode('url');
+            if (p.get('view') === 'pure') document.body.classList.add('pure-view');
+            handleMerge();
+        }
+    };
+</script>
+</body>
+</html>
